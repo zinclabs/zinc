@@ -55,7 +55,7 @@ phases:
       # - go build -o main cmd/zinc/main.go
       # Build binary and container images using goreleaser
       - echo Build started on `date`
-      # - GIT_TAG="$(git describe --tags --abbrev=0)"
+      - GIT_TAG="$(git describe --tags --abbrev=0)"
       # - GORELEASER_LATEST_VERSION=(curl -sL -o /dev/null -w %{url_effective} "https://github.com/goreleaser/goreleaser/releases/latest" | rev | cut -f1 -d'/'| rev)
       # - GORELEASER_LATEST_VERSION=v1.9.2
       # - wget https://github.com/goreleaser/goreleaser/releases/download/$GORELEASER_LATEST_VERSION/goreleaser_$(uname -s)_$(uname -m).tar.gz
