@@ -42,7 +42,7 @@
     "@vitejs/plugin-vue": "^2.3.3",
     "@vitest/ui": "^0.18.1",
     "@vue/test-utils": "^2.0.2",
-    "c8": "^7.11.3",
+    "c8": "^7.12.0",
     "cypress": "^10.3.0",
     "eslint": "^8.20.0",
     "eslint-config-prettier": "^8.5.0",
