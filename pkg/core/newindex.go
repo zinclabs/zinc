@@ -68,9 +68,7 @@ func NewIndex(name, storageType string, shardNum int64) (*Index, error) {
 		return nil, err
 	}
 	if index.ref.Settings != nil {
-		if index.ref.Settings.NumberOfShards == 0 {
-			index.ref.Settings.NumberOfShards = shardNum
-		} else {
+		if index.ref.Settings.NumberOfShards != 0 {
 			shardNum = index.ref.Settings.NumberOfShards
 		}
 	}
@@ -146,9 +144,6 @@ func checkIndex(index *Index) {
 
 	if index.ref.Settings == nil {
 		index.ref.Settings = new(meta.IndexSettings)
-	}
-	if index.ref.Settings != nil && index.ref.Settings.NumberOfShards == 0 {
-		index.ref.Settings.NumberOfShards = index.ref.ShardNum
 	}
 	if index.ref.Mappings == nil {
 		// set default mappings

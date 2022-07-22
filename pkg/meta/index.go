@@ -55,8 +55,8 @@ type IndexSimple struct {
 }
 
 type IndexSettings struct {
-	NumberOfShards   int64          `json:"-"`
-	NumberOfReplicas int64          `json:"-"`
+	NumberOfShards   int64          `json:"number_of_shards,omitempty"`
+	NumberOfReplicas int64          `json:"number_of_replicas,omitempty"`
 	Analysis         *IndexAnalysis `json:"analysis,omitempty"`
 }
 
