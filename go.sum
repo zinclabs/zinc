@@ -242,10 +242,6 @@ github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORR
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0/go.mod h1:8NvIoxWQoOIhqOTXgfV/d3M/q6VIi02HzZEHgUlZvzk=
 github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
-github.com/hashicorp/errwrap v1.0.0 h1:hLrqtEDnRye3+sgx6z4qVLNuviH3MR5aQ0ykNJa/UYA=
-github.com/hashicorp/errwrap v1.0.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brvKWEqk/Jc4=
-github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
-github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/hashicorp/go-version v1.2.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
 github.com/hashicorp/hcl v1.0.0/go.mod h1:E5yfLk+7swimpb2L/Alb/PJmXilQ/rhwaUYs4T20WEQ=
 github.com/imkira/go-interpol v1.1.0/go.mod h1:z0h2/2T3XF8kyEPpRgJ3kmNv+C43p+I/CoI+jC3w2iA=
@@ -505,8 +501,8 @@ github.com/yuin/goldmark v1.4.0/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yusufpapurcu/wmi v1.2.2 h1:KBNDSne4vP5mbSWnJbO+51IMOXJB67QiYCSBrubbPRg=
 github.com/yusufpapurcu/wmi v1.2.2/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
-github.com/zinclabs/bluge v1.1.6-rc h1:66US3OQH599VzppK5fhZ4wuhJuNvGx0azVAvWFv3DvM=
-github.com/zinclabs/bluge v1.1.6-rc/go.mod h1:GjpqBQvsiaK2cqS1BHeyeZdT3JuJS33dOGbf2GLAztE=
+github.com/zinclabs/bluge v1.1.6-rc-1 h1:T3eXHTcBZDzG5FDtvqA4IxjzwAyJaSSWpgaovEeLEKs=
+github.com/zinclabs/bluge v1.1.6-rc-1/go.mod h1:NSNqj94u5iYubjG61udd3SNWaHHgtAhPVX4mPp7ZPAg=
 github.com/zinclabs/bluge_segment_api v1.0.0 h1:GJvPxdzR7KjwdxmcKleQLvtIYi/J7Q7ehRlZqgGayzg=
 github.com/zinclabs/bluge_segment_api v1.0.0/go.mod h1:mYfPVUdXLZ4iXsicXMER+RcI/avwphjMOi8nhN9HDLA=
 github.com/zinclabs/ice v1.1.3 h1:LNfncdxQw2ix6P1T2ISmhO+6BFRa27qyTTfK0PitF2c=
