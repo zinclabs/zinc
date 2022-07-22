@@ -120,11 +120,15 @@ func CreateIndexWorker(newIndex *meta.IndexSimple, indexName string) error {
 		return errors.New(err.Error())
 	}
 
-	shardsNum := config.Global.Shard.Num
 	if newIndex.Settings != nil && newIndex.Settings.NumberOfShards != 0 {
-		shardsNum = newIndex.Settings.NumberOfShards
+		if newIndex.ShardNum == 0 {
+			newIndex.ShardNum = newIndex.Settings.NumberOfShards
+		}
 	}
-	index, err := core.NewIndex(newIndex.Name, newIndex.StorageType, shardsNum)
+	if newIndex.ShardNum == 0 {
+		newIndex.ShardNum = config.Global.Shard.Num
+	}
+	index, err := core.NewIndex(newIndex.Name, newIndex.StorageType, newIndex.ShardNum)
 	if err != nil {
 		return errors.New(err.Error())
 	}
