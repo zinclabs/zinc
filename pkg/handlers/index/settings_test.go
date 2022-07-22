@@ -27,7 +27,7 @@ import (
 
 func TestSettings(t *testing.T) {
 	t.Run("create index", func(t *testing.T) {
-		index, err := core.NewIndex("TestSettings.index_1", "disk")
+		index, err := core.NewIndex("TestSettings.index_1", "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 

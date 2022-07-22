@@ -21,6 +21,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/zinclabs/zinc/pkg/config"
 	"github.com/zinclabs/zinc/pkg/core"
 	"github.com/zinclabs/zinc/pkg/meta"
 	zincanalysis "github.com/zinclabs/zinc/pkg/uquery/analysis"
@@ -119,7 +120,11 @@ func CreateIndexWorker(newIndex *meta.IndexSimple, indexName string) error {
 		return errors.New(err.Error())
 	}
 
-	index, err := core.NewIndex(newIndex.Name, newIndex.StorageType)
+	shardsNum := config.Global.Shard.Num
+	if newIndex.Settings != nil && newIndex.Settings.NumberOfShards != 0 {
+		shardsNum = newIndex.Settings.NumberOfShards
+	}
+	index, err := core.NewIndex(newIndex.Name, newIndex.StorageType, shardsNum)
 	if err != nil {
 		return errors.New(err.Error())
 	}

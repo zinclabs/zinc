@@ -147,14 +147,14 @@ func (t *telemetry) runEvents() {
 func (t *telemetry) TotalIndexSize() uint64 {
 	TotalIndexSize := uint64(0)
 	for _, idx := range ZINC_INDEX_LIST.List() {
-		TotalIndexSize += t.GetIndexSize(idx.Name)
+		TotalIndexSize += t.GetIndexSize(idx.GetName())
 	}
 	return TotalIndexSize
 }
 
 func (t *telemetry) GetIndexSize(indexName string) uint64 {
 	if index, ok := ZINC_INDEX_LIST.Get(indexName); ok {
-		return atomic.LoadUint64(&index.StorageSize) / 1024 / 1024 // convert to MB
+		return atomic.LoadUint64(&index.ref.Stats.StorageSize) / 1024 / 1024 // convert to MB
 	}
 	return 0
 }

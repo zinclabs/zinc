@@ -42,19 +42,19 @@ func DeleteIndex(name string) error {
 	ZINC_INDEX_LIST.Delete(name)
 
 	// 3. Physically delete the index
-	if index.StorageType == "disk" {
+	if index.GetStorageType() == "disk" {
 		dataPath := config.Global.DataPath
-		err := os.RemoveAll(dataPath + "/" + index.Name)
+		err := os.RemoveAll(dataPath + "/" + index.GetName())
 		if err != nil {
 			log.Error().Err(err).Msg("failed to delete index")
 		}
-	} else if index.StorageType == "s3" {
-		err := deleteFilesForIndexFromS3(index.Name)
+	} else if index.GetStorageType() == "s3" {
+		err := deleteFilesForIndexFromS3(index.GetName())
 		if err != nil {
 			log.Error().Err(err).Msg("failed to delete index from S3")
 		}
-	} else if index.StorageType == "minio" {
-		err := deleteFilesForIndexFromMinIO(index.Name)
+	} else if index.GetStorageType() == "minio" {
+		err := deleteFilesForIndexFromMinIO(index.GetName())
 		if err != nil {
 			log.Error().Err(err).Msg("failed to delete index from minIO")
 		}

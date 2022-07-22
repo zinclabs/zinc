@@ -31,7 +31,7 @@ import (
 
 func TestIndex_Index(t *testing.T) {
 	indexName := "TestIndex_Index.index_1"
-	index, err := NewIndex(indexName, "disk")
+	index, err := NewIndex(indexName, "disk", 2)
 	assert.NoError(t, err)
 	assert.NotNil(t, index)
 
@@ -134,12 +134,12 @@ func TestIndex_BuildBlugeDocumentFromJSON(t *testing.T) {
 				},
 			},
 			init: func() {
-				index.Mappings.SetProperty("@timestamp", meta.Property{
+				index.GetMappings().SetProperty("@timestamp", meta.Property{
 					Type:   "time",
 					Index:  true,
 					Format: "2006-01-02 15:04:05.000",
 				})
-				index.Mappings.SetProperty("time", meta.Property{
+				index.GetMappings().SetProperty("time", meta.Property{
 					Type:   "time",
 					Index:  true,
 					Format: "2006-01-02 15:04:05.000",
@@ -161,18 +161,18 @@ func TestIndex_BuildBlugeDocumentFromJSON(t *testing.T) {
 				},
 			},
 			init: func() {
-				index.Mappings.SetProperty("id", meta.Property{
+				index.GetMappings().SetProperty("id", meta.Property{
 					Type:         "keyword",
 					Index:        true,
 					Aggregatable: true,
 				})
-				index.Mappings.SetProperty("name", meta.Property{
+				index.GetMappings().SetProperty("name", meta.Property{
 					Type:          "text",
 					Analyzer:      "analyzer_1",
 					Index:         true,
 					Highlightable: true,
 				})
-				index.Analyzers["analyzer_1"] = analyzer.NewStandardAnalyzer()
+				index.analyzers["analyzer_1"] = analyzer.NewStandardAnalyzer()
 			},
 			want:    &bluge.Document{},
 			wantErr: false,
@@ -257,13 +257,13 @@ func TestIndex_BuildBlugeDocumentFromJSON(t *testing.T) {
 	}
 
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex(indexName, "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 
 		err = StoreIndex(index)
 		assert.NoError(t, err)
-		index.Mappings.SetProperty("time", meta.NewProperty("date"))
+		index.GetMappings().SetProperty("time", meta.NewProperty("date"))
 	})
 
 	for _, tt := range tests {
@@ -305,7 +305,7 @@ func TestIndex_Settings(t *testing.T) {
 	indexName := "TestIndex_Settings.index_1"
 
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex(indexName, "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 

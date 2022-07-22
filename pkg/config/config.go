@@ -68,7 +68,9 @@ type config struct {
 // 16777216   16m
 
 type shard struct {
-	// MaxShards is the maximum number of shards to create.
+	// DefaultNum is the default number of shards.
+	Num int64 `env:"ZINC_SHARD_NUM,default=5"`
+	// MaxSize is the maximum size limit for one shard, or will create a new shard.
 	MaxSize uint64 `env:"ZINC_SHARD_MAX_SIZE,default=1073741824"`
 }
 

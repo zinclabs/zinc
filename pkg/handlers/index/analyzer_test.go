@@ -233,7 +233,7 @@ func TestAnalyze(t *testing.T) {
 	}
 
 	t.Run("prepare", func(t *testing.T) {
-		index, err := core.NewIndex(indexName, "disk")
+		index, err := core.NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 

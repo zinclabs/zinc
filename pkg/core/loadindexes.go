@@ -21,7 +21,6 @@ import (
 	"github.com/zinclabs/zinc/pkg/errors"
 	"github.com/zinclabs/zinc/pkg/meta"
 	"github.com/zinclabs/zinc/pkg/metadata"
-	"github.com/zinclabs/zinc/pkg/upgrade"
 	zincanalysis "github.com/zinclabs/zinc/pkg/uquery/analysis"
 )
 
@@ -32,41 +31,57 @@ func LoadZincIndexesFromMetadata() error {
 	}
 
 	for i := range indexes {
-		// cache mappings
+		readIndex := indexes[i]
 		index := new(Index)
-		index.Name = indexes[i].Name
-		index.StorageType = indexes[i].StorageType
-		index.StorageSize = indexes[i].StorageSize
-		index.DocTimeMin = indexes[i].DocTimeMin
-		index.DocTimeMax = indexes[i].DocTimeMax
-		index.DocNum = indexes[i].DocNum
-		index.ShardNum = indexes[i].ShardNum
-		index.Shards = append(index.Shards, indexes[i].Shards...)
-		index.Settings = indexes[i].Settings
-		index.Mappings = indexes[i].Mappings
-		index.CreateAt = indexes[i].CreateAt
-		index.UpdateAt = indexes[i].UpdateAt
-		index.close = make(chan struct{})
+		index.ref = new(meta.Index)
+		index.ref.Name = readIndex.Name
+		index.ref.StorageType = readIndex.StorageType
+		index.ref.Settings = readIndex.Settings
+		index.ref.Mappings = readIndex.Mappings
+		index.ref.Stats = readIndex.Stats
 
-		log.Info().Msgf("Loading  index... [%s:%s] shards[%d]", index.Name, index.StorageType, index.ShardNum)
-
-		// upgrade from version <= 0.2.4
-		if index.ShardNum == 0 {
-			index.ShardNum = 1
-			index.Shards = append(index.Shards, &meta.IndexShard{})
-			//upgrade data
-			if index.StorageType != "disk" {
-				log.Panic().Msgf("Only disk storage type support upgrade from version <= 0.2.4, Please manual upgrade\n# mv %s %s_bak\n# mkdir %s\n# mv %s_bak %s/000000\n# restart zinc", index.Name, index.Name, index.Name, index.Name, index.Name)
-			} else {
-				if err := upgrade.UpgradeFromV024Index(index.Name); err != nil {
-					log.Panic().Err(err).Msgf("Automatic upgrade from version <= 0.2.4 failed, Please manual upgrade\n# mv %s %s_bak\n# mkdir %s\n# mv %s_bak %s/000000\n# restart zinc", index.Name, index.Name, index.Name, index.Name, index.Name)
+		index.ref.ShardNum = readIndex.ShardNum
+		index.ref.Shards = make([]*meta.IndexShard, index.ref.ShardNum)
+		for i := range readIndex.Shards {
+			index.ref.Shards[i] = &meta.IndexShard{
+				ID:       readIndex.Shards[i].ID,
+				ShardNum: readIndex.Shards[i].ShardNum,
+				Stats:    readIndex.Shards[i].Stats,
+			}
+			index.ref.Shards[i].Shards = make([]*meta.IndexSecondShard, index.ref.Shards[i].ShardNum)
+			for j := range readIndex.Shards[i].Shards {
+				index.ref.Shards[i].Shards[j] = &meta.IndexSecondShard{
+					ID:    readIndex.Shards[i].Shards[j].ID,
+					Stats: readIndex.Shards[i].Shards[j].Stats,
 				}
 			}
 		}
 
+		// init shards wrapper
+		index.shardNum = index.ref.ShardNum
+		index.shardNumUint = uint64(index.shardNum)
+		index.shards = make([]*IndexShard, index.shardNum)
+		for i := range index.ref.Shards {
+			index.shards[i] = &IndexShard{root: index, ref: index.ref.Shards[i]}
+			index.shards[i].shards = make([]*IndexSecondShard, index.ref.Shards[i].ShardNum)
+			for j := range index.ref.Shards[i].Shards {
+				index.shards[i].shards[j] = &IndexSecondShard{
+					root: index,
+					ref:  index.ref.Shards[i].Shards[j],
+				}
+			}
+		}
+
+		log.Info().Msgf("Loading  index... [%s:%s] shards[%d]", index.ref.Name, index.ref.StorageType, index.ref.ShardNum)
+
+		// upgrade from version <= 0.2.4
+		// TODO v0.2.4 -> v0.2.7
+		// TODO v0.2.5 -> v0.2.7
+		// TODO v0.2.6 -> v0.2.7
+
 		// load index analysis
-		if index.Settings != nil && index.Settings.Analysis != nil {
-			index.Analyzers, err = zincanalysis.RequestAnalyzer(index.Settings.Analysis)
+		if index.ref.Settings != nil && index.ref.Settings.Analysis != nil {
+			index.analyzers, err = zincanalysis.RequestAnalyzer(index.ref.Settings.Analysis)
 			if err != nil {
 				return errors.New(errors.ErrorTypeRuntimeException, "parse stored analysis error").Cause(err)
 			}

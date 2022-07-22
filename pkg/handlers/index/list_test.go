@@ -29,7 +29,7 @@ import (
 
 func TestList(t *testing.T) {
 	t.Run("prepare", func(t *testing.T) {
-		index, err := core.NewIndex("TestIndexList.index_1", "disk")
+		index, err := core.NewIndex("TestIndexList.index_1", "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 
@@ -57,7 +57,7 @@ func TestList(t *testing.T) {
 				assert.NotNil(t, w.Body)
 
 				resp := struct {
-					List []*core.Index `json:"list"`
+					List []*meta.Index `json:"list"`
 					Page meta.Page     `json:"page"`
 				}{}
 				err := json.Unmarshal(w.Body.Bytes(), &resp)
@@ -82,7 +82,7 @@ func TestList(t *testing.T) {
 
 func TestIndexNameList(t *testing.T) {
 	t.Run("prepare", func(t *testing.T) {
-		index, err := core.NewIndex("TestIndexNameList.index_1", "disk")
+		index, err := core.NewIndex("TestIndexNameList.index_1", "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 

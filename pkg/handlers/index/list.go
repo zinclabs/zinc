@@ -60,41 +60,41 @@ func List(c *gin.Context) {
 	case "doc_num":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].DocNum > items[j].DocNum
+				return items[i].GetStats().DocNum > items[j].GetStats().DocNum
 			} else {
-				return items[i].DocNum < items[j].DocNum
+				return items[i].GetStats().DocNum < items[j].GetStats().DocNum
 			}
 		})
 	case "shard_num":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].ShardNum > items[j].ShardNum
+				return items[i].GetShardNum() > items[j].GetShardNum()
 			} else {
-				return items[i].ShardNum < items[j].ShardNum
+				return items[i].GetShardNum() < items[j].GetShardNum()
 			}
 		})
 	case "storage_size":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].StorageSize > items[j].StorageSize
+				return items[i].GetStats().StorageSize > items[j].GetStats().StorageSize
 			} else {
-				return items[i].StorageSize < items[j].StorageSize
+				return items[i].GetStats().StorageSize < items[j].GetStats().StorageSize
 			}
 		})
 	case "storage_type":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].StorageType > items[j].StorageType
+				return items[i].GetStorageType() > items[j].GetStorageType()
 			} else {
-				return items[i].StorageType < items[j].StorageType
+				return items[i].GetStorageType() < items[j].GetStorageType()
 			}
 		})
 	case "wal_size":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].WALSize > items[j].WALSize
+				return items[i].GetWALSize() > items[j].GetWALSize()
 			} else {
-				return items[i].WALSize < items[j].WALSize
+				return items[i].GetWALSize() < items[j].GetWALSize()
 			}
 		})
 	case "name":

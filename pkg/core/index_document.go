@@ -16,7 +16,6 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,8 +23,6 @@ import (
 
 	"github.com/blugelabs/bluge"
 	"github.com/goccy/go-json"
-	"github.com/rs/zerolog/log"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/zinclabs/zinc/pkg/config"
 	"github.com/zinclabs/zinc/pkg/errors"
@@ -82,14 +79,14 @@ func (index *Index) BuildBlugeDocumentFromJSON(docID string, doc map[string]inte
 	bdoc.AddField(bluge.NewDateTimeField(meta.TimeFieldName, timestamp).StoreValue().Sortable().Aggregatable())
 
 	docByteVal, _ := json.Marshal(doc)
-	bdoc.AddField(bluge.NewStoredOnlyField("_index", []byte(index.Name)))
+	bdoc.AddField(bluge.NewStoredOnlyField("_index", []byte(index.GetName())))
 	bdoc.AddField(bluge.NewStoredOnlyField("_source", docByteVal))
 	bdoc.AddField(bluge.NewCompositeFieldExcluding("_all", []string{"_id", "_index", "_source", meta.TimeFieldName}))
 
 	// Add time for index
 	bdoc.SetTimestamp(timestamp.UnixNano())
 	// Upate metadata
-	index.SetTimestamp(timestamp.UnixNano())
+	index.SetTimestamp(docID, timestamp.UnixNano())
 
 	return bdoc, nil
 }
@@ -100,7 +97,7 @@ func (index *Index) buildField(mappings *meta.Mappings, bdoc *bluge.Document, ke
 	switch prop.Type {
 	case "text":
 		field = bluge.NewTextField(key, value.(string)).SearchTermPositions()
-		fieldAnalyzer, _ := zincanalysis.QueryAnalyzerForField(index.Analyzers, mappings, key)
+		fieldAnalyzer, _ := zincanalysis.QueryAnalyzerForField(index.GetAnalyzers(), mappings, key)
 		if fieldAnalyzer != nil {
 			field.WithAnalyzer(fieldAnalyzer)
 		}
@@ -308,12 +305,14 @@ func (index *Index) checkField(mappings *meta.Mappings, data map[string]interfac
 
 // CreateDocument inserts or updates a document in the zinc index
 func (index *Index) CreateDocument(docID string, doc map[string]interface{}, update bool) error {
+	shard := index.GetShardByDocID(docID)
+
 	// check WAL
-	if err := index.OpenWAL(); err != nil {
+	if err := shard.OpenWAL(); err != nil {
 		return err
 	}
 
-	shardID := index.GetLatestShardID()
+	shardID := shard.GetLatestShardID()
 	if update {
 		shardID = -1
 	}
@@ -322,18 +321,20 @@ func (index *Index) CreateDocument(docID string, doc map[string]interface{}, upd
 		return err
 	}
 
-	return index.WAL.Write(data)
+	return shard.wal.Write(data)
 }
 
 // UpdateDocument updates a document in the zinc index
 func (index *Index) UpdateDocument(docID string, doc map[string]interface{}, insert bool) error {
+	shard := index.GetShardByDocID(docID)
+
 	// check WAL
-	if err := index.OpenWAL(); err != nil {
+	if err := shard.OpenWAL(); err != nil {
 		return err
 	}
 
 	update := true
-	shardID, err := index.FindShardByDocID(docID)
+	shardID, err := shard.FindShardByDocID(docID)
 	if err != nil {
 		if insert && err == errors.ErrorIDNotFound {
 			update = false
@@ -347,17 +348,19 @@ func (index *Index) UpdateDocument(docID string, doc map[string]interface{}, ins
 		return err
 	}
 
-	return index.WAL.Write(data)
+	return shard.wal.Write(data)
 }
 
 // DeleteDocument deletes a document in the zinc index
 func (index *Index) DeleteDocument(docID string) error {
+	shard := index.GetShardByDocID(docID)
+
 	// check WAL
-	if err := index.OpenWAL(); err != nil {
+	if err := shard.OpenWAL(); err != nil {
 		return err
 	}
 
-	shardID, err := index.FindShardByDocID(docID)
+	shardID, err := shard.FindShardByDocID(docID)
 	if err != nil {
 		return err
 	}
@@ -371,52 +374,7 @@ func (index *Index) DeleteDocument(docID string) error {
 	if err != nil {
 		return err
 	}
-	return index.WAL.Write(jstr)
-}
-
-// FindShardByDocID finds docID in which shard and returns the shard id
-func (index *Index) FindShardByDocID(docID string) (int64, error) {
-	query := bluge.NewBooleanQuery()
-	query.AddMust(bluge.NewTermQuery(docID).SetField("_id"))
-	request := bluge.NewTopNSearch(1, query).WithStandardAggregations()
-	ctx := context.Background()
-
-	// check id store by which shard
-	shardID := int64(-1)
-	writers, err := index.GetWriters()
-	if err != nil {
-		return shardID, err
-	}
-
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.SetLimit(config.Global.ReadGorutineNum)
-	for id := int64(len(writers)) - 1; id >= 0; id-- {
-		id := id
-		w := writers[id]
-		eg.Go(func() error {
-			r, err := w.Reader()
-			if err != nil {
-				log.Error().Err(err).Int64("shard", id).Str("index", index.Name).Msg("failed to get reader")
-				return nil // not check err, if returns err with cancel all gorutines.
-			}
-			defer r.Close()
-			dmi, err := r.Search(ctx, request)
-			if err != nil {
-				log.Error().Err(err).Int64("shard", id).Str("index", index.Name).Msg("failed to do search")
-				return nil // not check err, if returns err with cancel all gorutines.
-			}
-			if dmi.Aggregations().Count() > 0 {
-				shardID = id
-				return errors.ErrCancelSignal // check err, if returns err with cancel other all gorutines.
-			}
-			return nil
-		})
-	}
-	_ = eg.Wait()
-	if shardID == -1 {
-		return shardID, errors.ErrorIDNotFound
-	}
-	return shardID, nil
+	return shard.wal.Write(jstr)
 }
 
 // isDateProperty returns true if the given value matches the default date format.

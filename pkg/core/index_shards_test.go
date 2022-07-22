@@ -58,8 +58,9 @@ func TestIndex_Shards(t *testing.T) {
 
 	var index *Index
 	var err error
+	var indexName = "TestIndex_Shards.index_1"
 	t.Run("perpare", func(t *testing.T) {
-		index, err = NewIndex("TestIndex_Shards.index_1", "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 
@@ -75,7 +76,7 @@ func TestIndex_Shards(t *testing.T) {
 			// wait for WAL write to index
 			time.Sleep(time.Second)
 
-			if err := index.NewShard(); (err != nil) != tt.wantErr {
+			if err := index.GetShardByDocID(tt.args.docID).NewShard(); (err != nil) != tt.wantErr {
 				t.Errorf("Index.NewShard() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -84,4 +85,9 @@ func TestIndex_Shards(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("cleanup", func(t *testing.T) {
+		err := DeleteIndex(indexName)
+		assert.NoError(t, err)
+	})
 }

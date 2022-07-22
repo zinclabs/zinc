@@ -95,7 +95,7 @@ func TestIndex_CreateUpdateDocument(t *testing.T) {
 	var index *Index
 	var err error
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex(indexName, "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 		err = StoreIndex(index)
@@ -175,7 +175,7 @@ func TestIndex_UpdateDocument(t *testing.T) {
 	var index *Index
 	var err error
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex("TestIndex_UpdateDocument.index_1", "disk")
+		index, err = NewIndex("TestIndex_UpdateDocument.index_1", "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 		err = StoreIndex(index)
@@ -237,7 +237,7 @@ func TestIndex_DeleteDocument(t *testing.T) {
 	var index *Index
 	var err error
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex(indexName, "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 		err = StoreIndex(index)
@@ -414,7 +414,7 @@ func TestIndex_CreateUpdateDocumentWithDateField(t *testing.T) {
 	var index *Index
 	var err error
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex(indexName, "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 		err = StoreIndex(index)

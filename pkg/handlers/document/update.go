@@ -60,7 +60,7 @@ func Update(c *gin.Context) {
 	}
 
 	// If the index does not exist, then create it
-	index, _, err := core.GetOrCreateIndex(indexName, "")
+	index, _, err := core.GetOrCreateIndex(indexName, "", 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, meta.HTTPResponseError{Error: err.Error()})
 		return

@@ -15,40 +15,35 @@
 
 package meta
 
-import (
-	"sync"
-	"time"
-
-	"github.com/blugelabs/bluge"
-
-	"github.com/zinclabs/zinc/pkg/wal"
-)
-
 type Index struct {
 	Name        string         `json:"name"`
 	StorageType string         `json:"storage_type"`
-	StorageSize uint64         `json:"storage_size"`
-	DocNum      uint64         `json:"doc_num"`
-	DocTimeMin  int64          `json:"doc_time_min"`
-	DocTimeMax  int64          `json:"doc_time_max"`
-	ShardNum    int64          `json:"shard_num"`
-	Shards      []*IndexShard  `json:"shards"`
-	WAL         *wal.Log       `json:"-"`
-	WALSize     uint64         `json:"wal_size"`
 	Settings    *IndexSettings `json:"settings,omitempty"`
 	Mappings    *Mappings      `json:"mappings,omitempty"`
-	CreateAt    time.Time      `json:"create_at"`
-	UpdateAt    time.Time      `json:"update_at"`
+	ShardNum    int64          `json:"shard_num"`
+	Shards      []*IndexShard  `json:"shards"`
+	Stats       IndexStat      `json:"stats"`
 }
 
 type IndexShard struct {
-	ID          int64         `json:"id"`
-	DocTimeMin  int64         `json:"doc_time_min"`
-	DocTimeMax  int64         `json:"doc_time_max"`
-	DocNum      uint64        `json:"doc_num"`
-	StorageSize uint64        `json:"storage_size"`
-	Writer      *bluge.Writer `json:"-"`
-	Lock        sync.RWMutex  `json:"-"`
+	ID       int64               `json:"id"`
+	NodeID   string              `json:"node_id"` // remote instance ID
+	ShardNum int64               `json:"shard_num"`
+	Shards   []*IndexSecondShard `json:"shards"`
+	Stats    IndexStat           `json:"stats"`
+}
+
+type IndexSecondShard struct {
+	ID    int64     `json:"id"`
+	Stats IndexStat `json:"stats"`
+}
+
+type IndexStat struct {
+	DocNum      uint64 `json:"doc_num"`
+	DocTimeMin  int64  `json:"doc_time_min"`
+	DocTimeMax  int64  `json:"doc_time_max"`
+	StorageSize uint64 `json:"storage_size"`
+	WALSize     uint64 `json:"wal_size"`
 }
 
 type IndexSimple struct {
@@ -59,8 +54,8 @@ type IndexSimple struct {
 }
 
 type IndexSettings struct {
-	NumberOfShards   int            `json:"number_of_shards,omitempty"`
-	NumberOfReplicas int            `json:"number_of_replicas,omitempty"`
+	NumberOfShards   int64          `json:"number_of_shards,omitempty"`
+	NumberOfReplicas int64          `json:"number_of_replicas,omitempty"`
 	Analysis         *IndexAnalysis `json:"analysis,omitempty"`
 }
 
@@ -70,18 +65,4 @@ type IndexAnalysis struct {
 	Tokenizer   map[string]interface{} `json:"tokenizer,omitempty"`
 	TokenFilter map[string]interface{} `json:"token_filter,omitempty"`
 	Filter      map[string]interface{} `json:"filter,omitempty"` // compatibility with es, alias for TokenFilter
-}
-
-type SortIndex []*Index
-
-func (t SortIndex) Len() int {
-	return len(t)
-}
-
-func (t SortIndex) Swap(i, j int) {
-	t[i], t[j] = t[j], t[i]
-}
-
-func (t SortIndex) Less(i, j int) bool {
-	return t[i].Name < t[j].Name
 }

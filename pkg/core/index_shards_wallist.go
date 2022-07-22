@@ -26,38 +26,38 @@ import (
 )
 
 // Record opened WAL used to do consume
-var ZINC_INDEX_WAL_LIST IndexWALList
+var ZINC_INDEX_SHARD_WAL_LIST IndexShardWALList
 
-type IndexWALList struct {
-	Indexes map[string]*Index
-	lock    sync.RWMutex
+type IndexShardWALList struct {
+	Shards map[string]*IndexShard
+	lock   sync.RWMutex
 }
 
 func init() {
-	ZINC_INDEX_WAL_LIST.Indexes = make(map[string]*Index)
-	go ZINC_INDEX_WAL_LIST.ConsumeWAL()
+	ZINC_INDEX_SHARD_WAL_LIST.Shards = make(map[string]*IndexShard)
+	go ZINC_INDEX_SHARD_WAL_LIST.ConsumeWAL()
 }
 
-func (t *IndexWALList) Add(index *Index) {
+func (t *IndexShardWALList) Add(shard *IndexShard) {
 	t.lock.Lock()
-	t.Indexes[index.GetName()] = index
+	t.Shards[shard.GetShardName()] = shard
 	t.lock.Unlock()
 }
 
-func (t *IndexWALList) Remove(name string) {
+func (t *IndexShardWALList) Remove(name string) {
 	t.lock.Lock()
-	delete(t.Indexes, name)
+	delete(t.Shards, name)
 	t.lock.Unlock()
 }
 
-func (t *IndexWALList) Len() int {
+func (t *IndexShardWALList) Len() int {
 	t.lock.RLock()
-	n := len(t.Indexes)
+	n := len(t.Shards)
 	t.lock.RUnlock()
 	return n
 }
 
-func (t *IndexWALList) ConsumeWAL() {
+func (t *IndexShardWALList) ConsumeWAL() {
 	interval, err := parseInterval(config.Global.WalSyncInterval)
 	if err != nil {
 		log.Fatal().Err(err).Msg("consume ParseInterval")
@@ -68,17 +68,17 @@ func (t *IndexWALList) ConsumeWAL() {
 		eg.SetLimit(config.Global.ReadGorutineNum)
 		indexClosed := make(chan string, t.Len())
 		t.lock.RLock()
-		for _, idx := range t.Indexes {
-			var index = idx
+		for _, shard := range t.Shards {
+			shard := shard
 			eg.Go(func() error {
 				select {
-				case <-index.close:
-					indexClosed <- index.GetName()
+				case <-shard.close:
+					indexClosed <- shard.GetShardName()
 					return nil
 				default:
 					// continue
 				}
-				index.ConsumeWAL()
+				shard.ConsumeWAL()
 				return nil
 			})
 		}

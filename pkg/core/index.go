@@ -19,55 +19,77 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/blugelabs/bluge"
 	"github.com/blugelabs/bluge/analysis"
 	"github.com/goccy/go-json"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/zinclabs/zinc/pkg/meta"
-	"github.com/zinclabs/zinc/pkg/metadata"
 	zincanalysis "github.com/zinclabs/zinc/pkg/uquery/analysis"
 )
 
 type Index struct {
-	meta.Index
-	Analyzers map[string]*analysis.Analyzer `json:"-"`
-	lock      sync.RWMutex                  `json:"-"`
-	open      uint32                        `json:"-"`
-	close     chan struct{}                 `json:"-"`
+	ref          *meta.Index
+	analyzers    map[string]*analysis.Analyzer
+	shards       []*IndexShard
+	shardNum     int64
+	shardNumUint uint64 // just for do HASH
+	lock         sync.RWMutex
 }
 
 func (index *Index) MarshalJSON() ([]byte, error) {
 	index.lock.RLock()
-	b, err := json.Marshal(index.Index)
+	b, err := json.Marshal(index.ref)
 	index.lock.RUnlock()
 	return b, err
 }
 
+func (index *Index) GetIndex() meta.Index {
+	return *index.ref
+}
+
+func (index *Index) GetShardNum() int64 {
+	return index.shardNum
+}
+
 func (index *Index) GetName() string {
-	return index.Name
+	return index.ref.Name
+}
+
+func (index *Index) GetStorageType() string {
+	return index.ref.StorageType
 }
 
 func (index *Index) GetMappings() *meta.Mappings {
 	index.lock.RLock()
-	m := index.Mappings
+	m := index.ref.Mappings
 	index.lock.RUnlock()
 	return m
 }
 
 func (index *Index) GetSettings() *meta.IndexSettings {
 	index.lock.RLock()
-	s := index.Settings
+	s := index.ref.Settings
 	index.lock.RUnlock()
 	return s
 }
+
+func (index *Index) GetStats() meta.IndexStat {
+	index.lock.RLock()
+	s := index.ref.Stats
+	index.lock.RUnlock()
+	return s
+}
+
 func (index *Index) GetAnalyzers() map[string]*analysis.Analyzer {
 	index.lock.RLock()
-	a := index.Analyzers
+	a := index.analyzers
 	index.lock.RUnlock()
 	return a
 }
 
 func (index *Index) UseTemplate() error {
-	template, err := UseTemplate(index.Name)
+	template, err := UseTemplate(index.GetName())
 	if err != nil {
 		return err
 	}
@@ -97,7 +119,7 @@ func (index *Index) SetSettings(settings *meta.IndexSettings) error {
 	}
 
 	index.lock.Lock()
-	index.Settings = settings
+	index.ref.Settings = settings
 	index.lock.Unlock()
 
 	return nil
@@ -109,7 +131,7 @@ func (index *Index) SetAnalyzers(analyzers map[string]*analysis.Analyzer) error 
 	}
 
 	index.lock.Lock()
-	index.Analyzers = analyzers
+	index.analyzers = analyzers
 	index.lock.Unlock()
 
 	return nil
@@ -143,61 +165,102 @@ func (index *Index) SetMappings(mappings *meta.Mappings) error {
 
 	// update in the cache
 	index.lock.Lock()
-	index.Mappings = mappings
+	index.ref.Mappings = mappings
 	index.lock.Unlock()
 
 	return nil
 }
 
-func (index *Index) SetTimestamp(t int64) {
-	index.lock.Lock()
-	defer index.lock.Unlock()
-	if index.DocTimeMin == 0 {
-		index.DocTimeMin = t
-		index.DocTimeMax = t
-		return
+func (index *Index) SetTimestamp(docID string, t int64) {
+	shard := index.GetShardByDocID(docID)
+	shard.SetTimestamp(t)
+}
+
+func (index *Index) GetWALSize() uint64 {
+	size := uint64(0)
+	for _, shard := range index.shards {
+		s, err := shard.GetWALSize()
+		if err != nil {
+			return size
+		}
+		size += s
 	}
-	if t < index.DocTimeMin {
-		index.DocTimeMin = t
-	} else if t > index.DocTimeMax {
-		index.DocTimeMax = t
+	return size
+}
+
+// GetReaders return all shard readers
+func (index *Index) GetReaders(timeMin, timeMax int64) ([]*bluge.Reader, error) {
+	readers := make([]*bluge.Reader, 0)
+	for _, shard := range index.shards {
+		rs, err := shard.GetReaders(timeMin, timeMax)
+		if err != nil {
+			return nil, err
+		}
+		if len(rs) > 0 {
+			readers = append(readers, rs...)
+		}
 	}
+	return readers, nil
 }
 
 func (index *Index) UpdateMetadata() error {
 	var totalDocNum, totalSize uint64
 	// update docNum and storageSize
-	for i := int64(0); i < atomic.LoadInt64(&index.ShardNum); i++ {
-		index.UpdateMetadataByShard(i)
+	// for i := int64(0); i < index.shardNum; i++ {
+	// 	index.UpdateMetadataByShard(i)
+	// }
+	for i := int64(0); i < index.shardNum; i++ {
+		totalDocNum += atomic.LoadUint64(&index.shards[i].ref.Stats.DocNum)
+		totalSize += atomic.LoadUint64(&index.shards[i].ref.Stats.StorageSize)
 	}
-	index.lock.Lock()
-	defer index.lock.Unlock()
-	for i := int64(0); i < atomic.LoadInt64(&index.ShardNum); i++ {
-		totalDocNum += atomic.LoadUint64(&index.Shards[i].DocNum)
-		totalSize += atomic.LoadUint64(&index.Shards[i].StorageSize)
-	}
-	if totalDocNum > 0 && totalSize > 0 {
-		atomic.StoreUint64(&index.DocNum, totalDocNum)
-		atomic.StoreUint64(&index.StorageSize, totalSize)
-	}
-	// update docTime
-	s := index.Shards[index.GetLatestShardID()]
-	atomic.StoreInt64(&s.DocTimeMin, atomic.LoadInt64(&index.DocTimeMin))
-	atomic.StoreInt64(&s.DocTimeMax, atomic.LoadInt64(&index.DocTimeMax))
 
-	return metadata.Index.Set(index.Name, index.Index)
+	if totalDocNum > 0 && totalSize > 0 {
+		index.lock.Lock()
+		atomic.StoreUint64(&index.ref.Stats.DocNum, totalDocNum)
+		atomic.StoreUint64(&index.ref.Stats.StorageSize, totalSize)
+		index.lock.Unlock()
+	}
+
+	return storeIndex(index)
 }
 
 func (index *Index) UpdateMetadataByShard(n int64) {
-	index.lock.RLock()
-	s := index.Shards[n]
-	index.lock.RUnlock()
-	s.Lock.RLock()
-	w := s.Writer
-	s.Lock.RUnlock()
+	var totalDocNum, totalSize uint64
+	// update docNum and storageSize
+	shard := index.shards[n]
+	for i := int64(0); i < shard.GetShardNum(); i++ {
+		index.UpdateStatsBySecondShard(n, i)
+		totalDocNum += atomic.LoadUint64(&shard.ref.Shards[i].Stats.DocNum)
+		totalSize += atomic.LoadUint64(&shard.ref.Shards[i].Stats.StorageSize)
+	}
+	if totalDocNum > 0 && totalSize > 0 {
+		index.lock.Lock()
+		atomic.StoreUint64(&shard.ref.Stats.DocNum, totalDocNum)
+		atomic.StoreUint64(&shard.ref.Stats.StorageSize, totalSize)
+		index.lock.Unlock()
+	}
+
+	// update latest shard docTime
+	secondShard := index.shards[shard.GetLatestShardID()]
+	index.lock.Lock()
+	secondShard.ref.Stats.DocTimeMin = shard.ref.Stats.DocTimeMin
+	secondShard.ref.Stats.DocTimeMax = shard.ref.Stats.DocTimeMax
+	index.lock.Unlock()
+}
+
+func (index *Index) UpdateStatsBySecondShard(n, secondIndex int64) {
+	shard := index.shards[n]
+	shard.lock.RLock()
+	secondShard := shard.shards[secondIndex]
+	shard.lock.RUnlock()
+
+	secondShard.lock.RLock()
+	w := secondShard.writer
+	secondShard.lock.RUnlock()
 	if w == nil {
 		return
 	}
+
 	var docNum, storageSize uint64
 	_, storageSize = w.DirectoryStats()
 	if r, err := w.Reader(); err == nil {
@@ -209,50 +272,27 @@ func (index *Index) UpdateMetadataByShard(n int64) {
 
 	index.lock.Lock()
 	if docNum > 0 {
-		atomic.StoreUint64(&s.DocNum, docNum)
+		atomic.StoreUint64(&secondShard.ref.Stats.DocNum, docNum)
 	}
 	if storageSize > 0 {
-		atomic.StoreUint64(&s.StorageSize, storageSize)
+		atomic.StoreUint64(&secondShard.ref.Stats.StorageSize, storageSize)
 	}
 	index.lock.Unlock()
 }
 
+// Reopen just close the index, it will open automatically by trigger
+// Deprecated: it will be removed in the future
 func (index *Index) Reopen() error {
-	if err := index.Close(); err != nil {
-		return err
-	}
-	if err := index.OpenWAL(); err != nil {
-		return err
-	}
-	if _, err := index.GetWriter(); err != nil {
-		return err
-	}
-	return nil
+	return index.Close()
 }
 
 func (index *Index) Close() error {
-	if atomic.LoadUint32(&index.open) == 0 {
-		return nil
+	eg := errgroup.Group{}
+	for _, shard := range index.shards {
+		shard := shard
+		eg.Go(func() error {
+			return shard.Close()
+		})
 	}
-	index.close <- struct{}{}
-	atomic.StoreUint32(&index.open, 0)
-
-	index.lock.Lock()
-	defer index.lock.Unlock()
-	for _, shard := range index.Shards {
-		if shard.Writer == nil {
-			continue
-		}
-		if err := shard.Writer.Close(); err != nil {
-			return err
-		}
-		shard.Writer = nil
-	}
-
-	if err := index.WAL.Close(); err != nil {
-		return err
-	}
-	index.WAL = nil
-
-	return nil
+	return eg.Wait()
 }
