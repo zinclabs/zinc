@@ -171,11 +171,6 @@ func (index *Index) SetMappings(mappings *meta.Mappings) error {
 	return nil
 }
 
-func (index *Index) SetTimestamp(docID string, t int64) {
-	shard := index.GetShardByDocID(docID)
-	shard.SetTimestamp(t)
-}
-
 func (index *Index) GetWALSize() uint64 {
 	size := uint64(0)
 	for _, shard := range index.shards {
@@ -205,10 +200,6 @@ func (index *Index) GetReaders(timeMin, timeMax int64) ([]*bluge.Reader, error) 
 
 func (index *Index) UpdateMetadata() error {
 	var totalDocNum, totalSize uint64
-	// update docNum and storageSize
-	// for i := int64(0); i < index.shardNum; i++ {
-	// 	index.UpdateMetadataByShard(i)
-	// }
 	for i := int64(0); i < index.shardNum; i++ {
 		totalDocNum += atomic.LoadUint64(&index.shards[i].ref.Stats.DocNum)
 		totalSize += atomic.LoadUint64(&index.shards[i].ref.Stats.StorageSize)
@@ -243,8 +234,8 @@ func (index *Index) UpdateMetadataByShard(n int64) {
 	// update latest shard docTime
 	secondShard := index.shards[shard.GetLatestShardID()]
 	index.lock.Lock()
-	secondShard.ref.Stats.DocTimeMin = shard.ref.Stats.DocTimeMin
-	secondShard.ref.Stats.DocTimeMax = shard.ref.Stats.DocTimeMax
+	atomic.StoreInt64(&secondShard.ref.Stats.DocTimeMin, atomic.LoadInt64(&shard.ref.Stats.DocTimeMin))
+	atomic.StoreInt64(&secondShard.ref.Stats.DocTimeMax, atomic.LoadInt64(&shard.ref.Stats.DocTimeMax))
 	index.lock.Unlock()
 }
 
@@ -287,6 +278,10 @@ func (index *Index) Reopen() error {
 }
 
 func (index *Index) Close() error {
+	if err := index.UpdateMetadata(); err != nil {
+		return err
+	}
+
 	eg := errgroup.Group{}
 	for _, shard := range index.shards {
 		shard := shard

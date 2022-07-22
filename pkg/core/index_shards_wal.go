@@ -164,7 +164,7 @@ func (s *IndexShard) ConsumeWAL() {
 	if minID == maxID {
 		return // no new entries
 	}
-	log.Debug().Str("index", s.GetIndexName()).Int64("shard", s.GetID()).Uint64("minID", minID).Uint64("maxID", maxID).Msg("consume wal begin")
+	// log.Debug().Str("index", s.GetIndexName()).Int64("shard", s.GetID()).Uint64("minID", minID).Uint64("maxID", maxID).Msg("consume wal begin")
 
 	batch := blugeindex.NewBatch()
 	docs := make(walMergeDocs)
@@ -218,8 +218,7 @@ func (s *IndexShard) ConsumeWAL() {
 			return
 		}
 	}
-
-	log.Debug().Str("index", s.GetIndexName()).Int64("shard", s.GetID()).Uint64("minID", minID).Uint64("maxID", maxID).Msg("consume wal end")
+	// log.Debug().Str("index", s.GetIndexName()).Int64("shard", s.GetID()).Uint64("minID", minID).Uint64("maxID", maxID).Msg("consume wal end")
 
 	// Truncate log
 	if err = s.wal.TruncateFront(minID); err != nil {
@@ -366,7 +365,7 @@ func (w *walMergeDocs) WriteToShard(shard *IndexShard, shardID int64, batch *blu
 	for _, doc := range docs {
 		// str, err := json.Marshal(doc.data)
 		// fmt.Printf("%s, %v, %v\n", str, err, doc.actions)
-		bdoc, err := shard.root.BuildBlugeDocumentFromJSON(doc.docID, doc.data)
+		bdoc, err := shard.BuildBlugeDocumentFromJSON(doc.docID, doc.data)
 		if err != nil {
 			return err
 		}
@@ -455,7 +454,7 @@ func (w *walMergeDocs) WriteToShardRollback(shard *IndexShard, shardID int64, ba
 	}
 	var firstAction string
 	for _, doc := range docs {
-		bdoc, err := shard.root.BuildBlugeDocumentFromJSON(doc.docID, doc.data)
+		bdoc, err := shard.BuildBlugeDocumentFromJSON(doc.docID, doc.data)
 		if err != nil {
 			return err
 		}

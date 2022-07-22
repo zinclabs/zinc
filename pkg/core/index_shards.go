@@ -198,8 +198,8 @@ func (s *IndexShard) GetReaders(timeMin, timeMax int64) ([]*bluge.Reader, error)
 		s.lock.RLock()
 		secondShard := s.shards[i]
 		s.lock.RUnlock()
-		sMin := secondShard.ref.Stats.DocTimeMin
-		sMax := secondShard.ref.Stats.DocTimeMax
+		sMin := atomic.LoadInt64(&secondShard.ref.Stats.DocTimeMin)
+		sMax := atomic.LoadInt64(&secondShard.ref.Stats.DocTimeMax)
 		if (timeMin > 0 && sMax > 0 && sMax < timeMin) ||
 			(timeMax > 0 && sMin > 0 && sMin > timeMax) {
 			continue

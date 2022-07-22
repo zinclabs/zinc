@@ -50,6 +50,16 @@ func (t *IndexShardWALList) Remove(name string) {
 	t.lock.Unlock()
 }
 
+func (t *IndexShardWALList) List() []*IndexShard {
+	t.lock.RLock()
+	shards := make([]*IndexShard, 0, len(t.Shards))
+	for _, shard := range t.Shards {
+		shards = append(shards, shard)
+	}
+	t.lock.RUnlock()
+	return shards
+}
+
 func (t *IndexShardWALList) Len() int {
 	t.lock.RLock()
 	n := len(t.Shards)
@@ -67,8 +77,7 @@ func (t *IndexShardWALList) ConsumeWAL() {
 		eg := &errgroup.Group{}
 		eg.SetLimit(config.Global.ReadGorutineNum)
 		indexClosed := make(chan string, t.Len())
-		t.lock.RLock()
-		for _, shard := range t.Shards {
+		for _, shard := range t.List() {
 			shard := shard
 			eg.Go(func() error {
 				select {
@@ -83,7 +92,6 @@ func (t *IndexShardWALList) ConsumeWAL() {
 			})
 		}
 		_ = eg.Wait()
-		t.lock.RUnlock()
 		close(indexClosed)
 
 		// check index closed

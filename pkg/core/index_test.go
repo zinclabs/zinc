@@ -269,18 +269,22 @@ func TestIndex_BuildBlugeDocumentFromJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.init()
-			got, err := index.CheckDocument(tt.args.docID, tt.args.doc, false, 0)
+			shard := index.GetShardByDocID(tt.args.docID)
+			assert.NotNil(t, shard)
+
+			got, err := shard.CheckDocument(tt.args.docID, tt.args.doc, false, 0)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
 			assert.Nil(t, err)
 			assert.NotNil(t, got)
+
 			var doc map[string]interface{}
 			err = json.Unmarshal(got, &doc)
 			assert.NoError(t, err)
 			assert.NotNil(t, doc)
-			got2, err := index.BuildBlugeDocumentFromJSON(tt.args.docID, doc)
+			got2, err := shard.BuildBlugeDocumentFromJSON(tt.args.docID, doc)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
