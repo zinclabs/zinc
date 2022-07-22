@@ -30,13 +30,13 @@ import (
 // @Id ListIndexes
 // @Summary List indexes
 // @Tags    Index
-// @Param   page_num  query  integer  false  "page num"
-// @Param   page_size  query  integer  false  "page size"
-// @Param   sort_by  query  string  false  "sort by"
-// @Param   desc  query  boolen  false  "desc"
-// @Param   name  query  string  false  "name"
+// @Param   page_num  query  integer false  "page num"
+// @Param   page_size query  integer false  "page size"
+// @Param   sort_by   query  string  false  "sort by"
+// @Param   desc      query  bool    false  "desc"
+// @Param   name      query  string  false  "name"
 // @Produce json
-// @Success 200 {object} {list:[]core.Index, page: meta.Page}
+// @Success 200 {object} IndexListResponse
 // @Router /api/index [get]
 func List(c *gin.Context) {
 	page := meta.NewPage(c)
@@ -117,9 +117,9 @@ func List(c *gin.Context) {
 		items = []*core.Index{}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"list": items,
-		"page": page,
+	c.JSON(http.StatusOK, IndexListResponse{
+		List: items,
+		Page: page,
 	})
 }
 
@@ -150,4 +150,9 @@ func IndexNameList(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, items)
 	}
+}
+
+type IndexListResponse struct {
+	List []*core.Index `json:"list"`
+	Page *meta.Page    `json:"page"`
 }

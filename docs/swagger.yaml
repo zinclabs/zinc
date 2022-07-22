@@ -33,35 +33,6 @@ definitions:
         type: string
     type: object
   core.Index:
-    properties:
-      create_at:
-        type: string
-      doc_num:
-        type: integer
-      doc_time_max:
-        type: integer
-      doc_time_min:
-        type: integer
-      mappings:
-        $ref: '#/definitions/meta.Mappings'
-      name:
-        type: string
-      settings:
-        $ref: '#/definitions/meta.IndexSettings'
-      shard_num:
-        type: integer
-      shards:
-        items:
-          $ref: '#/definitions/meta.IndexShard'
-        type: array
-      storage_size:
-        type: integer
-      storage_type:
-        type: string
-      update_at:
-        type: string
-      wal_size:
-        type: integer
     type: object
   index.AnalyzeResponse:
     properties:
@@ -84,6 +55,15 @@ definitions:
         type: string
       type:
         type: string
+    type: object
+  index.IndexListResponse:
+    properties:
+      list:
+        items:
+          $ref: '#/definitions/core.Index'
+        type: array
+      page:
+        $ref: '#/definitions/meta.Page'
     type: object
   meta.AggregationAutoDateHistogram:
     properties:
@@ -488,19 +468,6 @@ definitions:
       number_of_shards:
         type: integer
     type: object
-  meta.IndexShard:
-    properties:
-      doc_num:
-        type: integer
-      doc_time_max:
-        type: integer
-      doc_time_min:
-        type: integer
-      id:
-        type: integer
-      storage_size:
-        type: integer
-    type: object
   meta.IndexSimple:
     properties:
       mappings:
@@ -510,6 +477,8 @@ definitions:
         type: string
       settings:
         $ref: '#/definitions/meta.IndexSettings'
+      shard_num:
+        type: integer
       storage_type:
         type: string
     type: object
@@ -604,6 +573,15 @@ definitions:
         description: best_fields(default), most_fields, cross_fields, phrase, phrase_prefix,
           bool_prefix
         type: string
+    type: object
+  meta.Page:
+    properties:
+      page_num:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
     type: object
   meta.PrefixQuery:
     properties:
@@ -1495,15 +1473,34 @@ paths:
   /api/index:
     get:
       operationId: ListIndexes
+      parameters:
+      - description: page num
+        in: query
+        name: page_num
+        type: integer
+      - description: page size
+        in: query
+        name: page_size
+        type: integer
+      - description: sort by
+        in: query
+        name: sort_by
+        type: string
+      - description: desc
+        in: query
+        name: desc
+        type: boolean
+      - description: name
+        in: query
+        name: name
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/core.Index'
-            type: array
+            $ref: '#/definitions/index.IndexListResponse'
       summary: List indexes
       tags:
       - Index
