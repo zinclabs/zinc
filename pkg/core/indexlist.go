@@ -127,6 +127,9 @@ func (t *IndexList) ListStat() []*Index {
 	items := t.List()
 	for _, index := range items {
 		size := index.GetWALSize()
+		if size == uint64(index.GetShardNum()) {
+			size = 0
+		}
 		atomic.StoreUint64(&index.ref.Stats.WALSize, size)
 		_ = index.UpdateMetadata()
 	}
