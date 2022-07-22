@@ -55,14 +55,14 @@ func (s *IndexShard) OpenWAL() error {
 	}
 	s.lock.Unlock()
 
+	// set wal opened
+	atomic.StoreUint32(&s.open, 1)
+	s.close = make(chan struct{})
+
 	// check wal rollback
 	if err = s.Rollback(); err != nil {
 		return err
 	}
-
-	// set wal opened
-	atomic.StoreUint32(&s.open, 1)
-	s.close = make(chan struct{})
 
 	// set wal to consumer list
 	ZINC_INDEX_SHARD_WAL_LIST.Add(s)
@@ -136,13 +136,6 @@ func (s *IndexShard) Rollback() error {
 }
 
 func (s *IndexShard) ConsumeWAL() {
-	select {
-	case <-s.close:
-		return
-	default:
-		// continue
-	}
-
 	if err := s.wal.Sync(); err != nil {
 		log.Error().Err(err).Str("index", s.GetIndexName()).Int64("shard", s.GetID()).Msg("consume wal.Sync()")
 	}

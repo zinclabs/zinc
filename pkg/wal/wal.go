@@ -93,8 +93,8 @@ func (l *Log) Sync() error {
 }
 
 func (l *Log) Close() error {
-	if err := l.Redo.Close(); err != nil {
+	if err := l.log.Close(); err != nil {
 		return err
 	}
-	return l.log.Close()
+	return l.Redo.Close()
 }
