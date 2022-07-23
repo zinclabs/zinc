@@ -58,6 +58,7 @@ func LoadZincIndexesFromMetadata() error {
 		}
 
 		// init shards wrapper
+		totalShardNum := 0
 		index.shardNum = index.ref.ShardNum
 		index.shardNumUint = uint64(index.shardNum)
 		index.shards = make([]*IndexShard, index.shardNum)
@@ -69,10 +70,11 @@ func LoadZincIndexesFromMetadata() error {
 					root: index,
 					ref:  index.ref.Shards[i].Shards[j],
 				}
+				totalShardNum++
 			}
 		}
 
-		log.Info().Msgf("Loading  index... [%s:%s] shards[%d]", index.ref.Name, index.ref.StorageType, index.ref.ShardNum)
+		log.Info().Msgf("Loading  index... [%s:%s] shards[%d:%d]", index.ref.Name, index.ref.StorageType, index.ref.ShardNum, totalShardNum)
 
 		// upgrade from version <= 0.2.4
 		// TODO v0.2.4 -> v0.2.7

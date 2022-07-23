@@ -24,6 +24,7 @@ import (
 	"github.com/blugelabs/bluge/search/highlight"
 	"github.com/rs/zerolog/log"
 
+	zsearch "github.com/zinclabs/zinc/pkg/bluge/search"
 	"github.com/zinclabs/zinc/pkg/meta"
 	"github.com/zinclabs/zinc/pkg/uquery"
 	"github.com/zinclabs/zinc/pkg/uquery/fields"
@@ -58,7 +59,8 @@ func (index *Index) Search(query *meta.ZincQuery) (*meta.SearchResponse, error) 
 		defer cancel()
 	}
 
-	dmi, err := bluge.MultiSearch(ctx, searchRequest, readers...)
+	// dmi, err := bluge.MultiSearch(ctx, searchRequest, readers...)
+	dmi, err := zsearch.MultiSearch(ctx, searchRequest, readers...)
 	if err != nil {
 		log.Printf("index.SearchV2: error executing search: %s", err.Error())
 		if err == context.DeadlineExceeded {

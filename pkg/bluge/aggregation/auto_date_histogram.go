@@ -201,6 +201,9 @@ func (a *AutoDateHistogramCalculator) Finish() {
 		if len(a.bucketsList) <= a.size {
 			for value := a.minValue; value < a.maxValue; value += int64(a.intervals[a.currentInterval]) {
 				termKey, termStr := a.bucketKey(value)
+				if a.bucketsMap == nil {
+					a.bucketsMap = make(map[int64]*search.Bucket)
+				}
 				if _, ok := a.bucketsMap[termKey]; !ok {
 					a.bucketsMap[termKey] = search.NewBucket(termStr, a.aggregations)
 				}
