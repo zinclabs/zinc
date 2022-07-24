@@ -39,7 +39,7 @@ require (
 
 )
 
-replace github.com/blugelabs/bluge => github.com/zinclabs/bluge v0.0.0-20220722101617-f78291af7317
+replace github.com/blugelabs/bluge => github.com/zinclabs/bluge v0.0.0-20220724000216-c04cc8a5e2d8
 
 replace github.com/blugelabs/ice => github.com/zinclabs/ice v1.1.3
 
