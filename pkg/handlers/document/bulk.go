@@ -143,7 +143,7 @@ func BulkWorker(target string, body io.Reader) (*BulkResponse, error) {
 			default:
 			}
 
-			newIndex, _, err := core.GetOrCreateIndex(indexName, "")
+			newIndex, _, err := core.GetOrCreateIndex(indexName, "", 0)
 			if err != nil {
 				return bulkRes, err
 			}
@@ -187,7 +187,7 @@ func BulkWorker(target string, body io.Reader) (*BulkResponse, error) {
 						return nil, errors.New("bulk index data format error")
 					}
 
-					newIndex, _, err := core.GetOrCreateIndex(indexName, "")
+					newIndex, _, err := core.GetOrCreateIndex(indexName, "", 0)
 					if err != nil {
 						return bulkRes, err
 					}

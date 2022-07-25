@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/blugelabs/bluge"
@@ -59,7 +58,7 @@ func MultiSearch(indexNames []string, query *meta.ZincQuery) (*meta.SearchRespon
 			return nil, err
 		}
 		readers = append(readers, reader...)
-		shardNum += atomic.LoadInt64(&index.ShardNum)
+		shardNum += index.GetShardNum()
 		if mappings == nil {
 			mappings = index.GetMappings()
 			analyzers = index.GetAnalyzers()

@@ -49,7 +49,7 @@ func GetESMapping(c *gin.Context) {
 	// kept in the resulting mapping.
 	es := convertToESMapping(mappings)
 
-	c.JSON(http.StatusOK, gin.H{index.Name: gin.H{"mappings": es}})
+	c.JSON(http.StatusOK, gin.H{index.GetName(): gin.H{"mappings": es}})
 }
 
 // convertToESMapping converts the given Zinc mappings to the ElasticSearch representation.

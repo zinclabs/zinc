@@ -66,7 +66,7 @@ func TestNewIndex(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewIndex(tt.args.name, tt.args.storageType)
+			got, err := NewIndex(tt.args.name, tt.args.storageType, 2)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -112,7 +112,7 @@ func TestGetIndex(t *testing.T) {
 	}
 
 	t.Run("prepare", func(t *testing.T) {
-		index, err := NewIndex("TestGetIndex.index_1", "disk")
+		index, err := NewIndex("TestGetIndex.index_1", "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 

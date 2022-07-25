@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/blugelabs/bluge"
 	"github.com/blugelabs/bluge/analysis"
@@ -46,7 +45,7 @@ func CheckIndexName(name string) error {
 }
 
 // NewIndex creates an instance of a physical zinc index that can be used to store and retrieve data.
-func NewIndex(name, storageType string) (*Index, error) {
+func NewIndex(name, storageType string, shardNum int64) (*Index, error) {
 	if err := CheckIndexName(name); err != nil {
 		return nil, err
 	}
@@ -55,21 +54,47 @@ func NewIndex(name, storageType string) (*Index, error) {
 		storageType = "disk"
 	}
 
+	if shardNum <= 0 {
+		shardNum = config.Global.Shard.Num
+	}
+
 	index := new(Index)
-	index.Name = name
-	index.StorageType = storageType
-	index.ShardNum = 1
-	index.CreateAt = time.Now()
-	index.close = make(chan struct{})
+	index.ref = new(meta.Index)
+	index.ref.Name = name
+	index.ref.StorageType = storageType
 
 	// use template
 	if err := index.UseTemplate(); err != nil {
 		return nil, err
 	}
+	if index.ref.Settings != nil {
+		if index.ref.Settings.NumberOfShards != 0 {
+			shardNum = index.ref.Settings.NumberOfShards
+		}
+	}
 
-	// init shards writer
-	for i := int64(0); i < index.ShardNum; i++ {
-		index.Shards = append(index.Shards, &meta.IndexShard{ID: i})
+	index.ref.ShardNum = shardNum
+	index.shardNum = shardNum
+	for i := int64(0); i < index.shardNum; i++ {
+		shard := &meta.IndexShard{ID: i, ShardNum: 1}
+		for j := int64(0); j < shard.ShardNum; j++ {
+			shard.Shards = append(shard.Shards, &meta.IndexSecondShard{ID: j})
+		}
+		index.ref.Shards = append(index.ref.Shards, shard)
+	}
+
+	// init shards wrapper
+	index.shardNumUint = uint64(index.shardNum)
+	index.shards = make([]*IndexShard, index.shardNum)
+	for i := range index.ref.Shards {
+		index.shards[i] = &IndexShard{root: index, ref: index.ref.Shards[i]}
+		index.shards[i].shards = make([]*IndexSecondShard, index.ref.Shards[i].ShardNum)
+		for j := range index.ref.Shards[i].Shards {
+			index.shards[i].shards[j] = &IndexSecondShard{
+				root: index,
+				ref:  index.ref.Shards[i].Shards[j],
+			}
+		}
 	}
 
 	return index, nil
@@ -103,6 +128,8 @@ func getOpenConfig(name string, storageType string, defaultSearchAnalyzer *analy
 
 // storeIndex stores the index to metadata
 func StoreIndex(index *Index) error {
+	// check index
+	checkIndex(index)
 	// store index
 	if err := storeIndex(index); err != nil {
 		return err
@@ -112,28 +139,33 @@ func StoreIndex(index *Index) error {
 	return nil
 }
 
-func storeIndex(index *Index) error {
+func checkIndex(index *Index) {
 	index.lock.Lock()
-	defer index.lock.Unlock()
 
-	if index.Settings == nil {
-		index.Settings = new(meta.IndexSettings)
+	if index.ref.Settings == nil {
+		index.ref.Settings = new(meta.IndexSettings)
 	}
-	if index.Analyzers == nil {
-		index.Analyzers = make(map[string]*analysis.Analyzer)
-	}
-	if index.Mappings == nil {
+	if index.ref.Mappings == nil {
 		// set default mappings
-		index.Mappings = meta.NewMappings()
-		index.Mappings.SetProperty(meta.TimeFieldName, meta.NewProperty("date"))
+		index.ref.Mappings = meta.NewMappings()
+		index.ref.Mappings.SetProperty(meta.TimeFieldName, meta.NewProperty("date"))
+	}
+	if index.analyzers == nil {
+		index.analyzers = make(map[string]*analysis.Analyzer)
 	}
 
-	index.UpdateAt = time.Now()
-	err := metadata.Index.Set(index.Name, index.Index)
+	index.lock.Unlock()
+}
+
+func storeIndex(index *Index) error {
+	data, err := index.MarshalJSON()
 	if err != nil {
-		return fmt.Errorf("core.StoreIndex: index: %s, error: %s", index.Name, err.Error())
+		return fmt.Errorf("core.storeIndex: index: %s, error: %s", index.ref.Name, err.Error())
 	}
-
+	err = metadata.Index.Set(index.GetName(), data)
+	if err != nil {
+		return fmt.Errorf("core.storeIndex: index: %s, error: %s", index.ref.Name, err.Error())
+	}
 	return nil
 }
 
@@ -141,6 +173,6 @@ func GetIndex(name string) (*Index, bool) {
 	return ZINC_INDEX_LIST.Get(name)
 }
 
-func GetOrCreateIndex(name, storageType string) (*Index, bool, error) {
-	return ZINC_INDEX_LIST.GetOrCreate(name, storageType)
+func GetOrCreateIndex(name, storageType string, shardNum int64) (*Index, bool, error) {
+	return ZINC_INDEX_LIST.GetOrCreate(name, storageType, shardNum)
 }

@@ -17,9 +17,11 @@ package index
 
 import (
 	"net/http"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/zinclabs/zinc/pkg/config"
 	"github.com/zinclabs/zinc/pkg/core"
 	"github.com/zinclabs/zinc/pkg/meta"
 	zincanalysis "github.com/zinclabs/zinc/pkg/uquery/analysis"
@@ -47,7 +49,7 @@ func GetSettings(c *gin.Context) {
 		settings = new(meta.IndexSettings)
 	}
 
-	c.JSON(http.StatusOK, gin.H{index.Name: gin.H{"settings": settings}})
+	c.JSON(http.StatusOK, gin.H{index.GetName(): gin.H{"settings": settings}})
 }
 
 // @Id SetSettings
@@ -85,7 +87,11 @@ func SetSettings(c *gin.Context) {
 		return
 	}
 
-	index, exists, err := core.GetOrCreateIndex(indexName, "")
+	shardsNum := config.Global.Shard.Num
+	if settings.NumberOfShards != 0 {
+		shardsNum = settings.NumberOfShards
+	}
+	index, exists, err := core.GetOrCreateIndex(indexName, "", shardsNum)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, meta.HTTPResponseError{Error: err.Error()})
 		return
@@ -93,7 +99,8 @@ func SetSettings(c *gin.Context) {
 	if exists {
 		// it can only change settings.NumberOfReplicas when index exists
 		if settings.NumberOfReplicas > 0 {
-			index.Settings.NumberOfReplicas = settings.NumberOfReplicas
+			indexSettings := index.GetSettings()
+			atomic.StoreInt64(&indexSettings.NumberOfReplicas, settings.NumberOfReplicas)
 		}
 		if settings.Analysis != nil && len(settings.Analysis.Analyzer) > 0 {
 			c.JSON(http.StatusBadRequest, meta.HTTPResponseError{Error: "can't update analyzer for existing index"})

@@ -24,7 +24,7 @@ import (
 func TestTelemetry(t *testing.T) {
 	indexName := "TestTelemetry.index_1"
 	t.Run("prepare", func(t *testing.T) {
-		index, err := NewIndex(indexName, "disk")
+		index, err := NewIndex(indexName, "disk", 1)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 
@@ -33,7 +33,8 @@ func TestTelemetry(t *testing.T) {
 	})
 
 	t.Run("telemetry", func(t *testing.T) {
-		Telemetry.createInstanceID()
+		id := Telemetry.createInstanceID()
+		assert.NotEmpty(t, id)
 		Telemetry.Instance()
 		Telemetry.Event("server_start", nil)
 		Telemetry.Cron()

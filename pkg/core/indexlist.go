@@ -19,9 +19,12 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/zinclabs/zinc/pkg/config"
 	"github.com/zinclabs/zinc/pkg/meta"
 	"github.com/zinclabs/zinc/pkg/metadata"
 )
@@ -41,14 +44,6 @@ func init() {
 		if err != nil {
 			fmt.Println("error:", err)
 		}
-		// } else {
-		// version := string(version)
-		// if version != meta.Version {
-		// 	log.Error().Msgf("Version mismatch, loading data from old version %s", version)
-		// 	if err := upgrade.Do(version); err != nil {
-		// 		log.Fatal().Err(err).Msg("Failed to upgrade")
-		// 	}
-		// }
 	}
 
 	// start loading index
@@ -60,7 +55,7 @@ func init() {
 
 func (t *IndexList) Add(index *Index) {
 	t.lock.Lock()
-	t.Indexes[index.Name] = index
+	t.Indexes[index.GetName()] = index
 	t.lock.Unlock()
 }
 
@@ -71,7 +66,7 @@ func (t *IndexList) Get(name string) (*Index, bool) {
 	return idx, ok
 }
 
-func (t *IndexList) GetOrCreate(name, storageType string) (*Index, bool, error) {
+func (t *IndexList) GetOrCreate(name, storageType string, shardNum int64) (*Index, bool, error) {
 	t.lock.RLock()
 	idx, ok := t.Indexes[name]
 	t.lock.RUnlock()
@@ -86,15 +81,17 @@ func (t *IndexList) GetOrCreate(name, storageType string) (*Index, bool, error) 
 		return idx, true, nil
 	}
 	// okay, let's create new index
-	idx, err := NewIndex(name, storageType)
+	idx, err := NewIndex(name, storageType, shardNum)
 	if err != nil {
 		return nil, false, err
 	}
+	// check index
+	checkIndex(idx)
 	if err = storeIndex(idx); err != nil {
 		return nil, false, err
 	}
 	// cache it
-	t.Indexes[idx.Name] = idx
+	t.Indexes[idx.GetName()] = idx
 	return idx, false, nil
 }
 
@@ -129,16 +126,12 @@ func (t *IndexList) List() []*Index {
 func (t *IndexList) ListStat() []*Index {
 	items := t.List()
 	for _, index := range items {
-		size := uint64(0)
-		index.lock.Lock()
-		if index.WAL != nil {
-			size, _ = index.WAL.Len()
-			if size == 1 {
-				size = 0
-			}
+		size := index.GetWALSize()
+		if size == uint64(index.GetShardNum()) {
+			size = 0
 		}
-		index.WALSize = size
-		index.lock.Unlock()
+		atomic.StoreUint64(&index.ref.Stats.WALSize, size)
+		_ = index.UpdateMetadata()
 	}
 	return items
 }
@@ -160,15 +153,18 @@ func (t *IndexList) ListName() []string {
 func (t *IndexList) Close() error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
+	eg := errgroup.Group{}
+	eg.SetLimit(config.Global.ReadGorutineNum)
 	for _, index := range t.Indexes {
-		if err := index.Close(); err != nil {
-			return err
-		}
+		index := index
+		eg.Go(func() error {
+			return index.Close()
+		})
 	}
-	return nil
+	return eg.Wait()
 }
 
-// GC auto close unused indexes what unactive for a long time (10m)
+// GC auto close unused indexes what inactive for a long time (10m)
 func (t *IndexList) GC() error {
 	return nil // TODO: implement GC
 }

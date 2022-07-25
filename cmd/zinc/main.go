@@ -77,7 +77,8 @@ func main() {
 		Addr:    ":" + PORT,
 		Handler: app,
 	}
-	shutdown(func(grace bool) {
+
+	done := shutdown(func(grace bool, done chan<- struct{}) {
 		// close http server
 		if grace {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
@@ -88,21 +89,28 @@ func main() {
 		} else {
 			server.Close()
 		}
+
+		log.Info().Msg("Index closing...")
 		// close indexes
 		err := core.ZINC_INDEX_LIST.Close()
 		log.Info().Err(err).Msgf("Index closed")
 		// close metadata
 		err = metadata.Close()
 		log.Info().Err(err).Msgf("Metadata closed")
+
+		done <- struct{}{}
 	})
 
 	if err := server.ListenAndServe(); err != nil {
 		if err == http.ErrServerClosed {
-			log.Info().Msg("Server closed under request")
+			log.Info().Msg("Server closed")
 		} else {
 			log.Fatal().Err(err).Msg("Server closed unexpect")
 		}
 	}
+
+	<-done
+
 	log.Info().Msg("Server shutdown ok")
 }
 
@@ -170,17 +178,18 @@ func profiling() {
 	if err != nil {
 		log.Print("pyroscope.Start: ", err.Error())
 	}
-
 }
 
 //shutdown support twice signal must exit
-func shutdown(stop func(grace bool)) {
+func shutdown(stop func(grace bool, done chan<- struct{})) <-chan struct{} {
+	done := make(chan struct{})
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGQUIT, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		s := <-sig
-		go stop(s != syscall.SIGQUIT)
+		go stop(s != syscall.SIGQUIT, done)
 		<-sig
 		os.Exit(128 + int(s.(syscall.Signal))) // second signal. Exit directly.
 	}()
+	return done
 }

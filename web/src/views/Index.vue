@@ -22,7 +22,7 @@
           :placeholder="t('index.search')"
         >
           <template #append>
-            <q-icon name="search" class="cursor-pointer" />
+            <q-icon name="search" class="cursor-pointer" @click="getIndexes" />
           </template>
         </q-input>
         <q-btn
@@ -157,19 +157,25 @@ export default defineComponent({
           var counter = 1;
           pagination.value.rowsNumber = res.data.page.total;
           indexes.value = res.data.list.map((data) => {
-            let storage_size = (data.storage_size / 1024).toFixed(2) + " KB";
-            if (data.storage_size > 1024 * 1024) {
+            let storage_size =
+              (data.stats.storage_size / 1024).toFixed(2) + " KB";
+            if (data.stats.storage_size > 1024 * 1024) {
               storage_size =
-                (data.storage_size / 1024 / 1024).toFixed(2) + " MB";
+                (data.stats.storage_size / 1024 / 1024).toFixed(2) + " MB";
+            }
+            if (data.stats.storage_size > 1024 * 1024 * 1024) {
+              storage_size =
+                (data.stats.storage_size / 1024 / 1024 / 1024).toFixed(2) +
+                " GB";
             }
             return {
               no: counter++,
               name: data.name,
-              doc_num: data.doc_num,
+              doc_num: data.stats.doc_num,
               shard_num: data.shard_num,
               storage_size: storage_size,
               storage_type: data.storage_type,
-              wal_size: data.wal_size,
+              wal_size: data.stats.wal_size,
               actions: {
                 settings: data.settings,
                 mappings: data.mappings,
@@ -318,6 +324,7 @@ export default defineComponent({
       pagination,
       onRequest,
       filterQuery,
+      getIndexes,
       addIndex,
       deleteIndex,
       previewIndex,

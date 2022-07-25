@@ -160,7 +160,7 @@ func Search(index *core.Index, iQuery *ZincQuery) (*SearchResponse, error) {
 		}
 
 		hit := Hit{
-			Index:     index.Name,
+			Index:     index.GetName(),
 			Type:      "_doc",
 			ID:        id,
 			Score:     next.Score,

@@ -37,6 +37,15 @@
               :bg-color="disableColor"
               :rules="[validateStorageType]"
               label="Storage Type"
+              class="q-py-md"
+            />
+            <q-input
+              v-model="indexData.shard_num"
+              borderless
+              filled
+              label="Shard num (optional)"
+              :rules="[validateShardNum]"
+              class="q-py-md"
             />
           </q-form>
         </q-step>
@@ -181,6 +190,7 @@ export default defineComponent({
       this.disableColor = "grey-5";
       this.indexData.name = this.modelValue.name;
       this.indexData.storage_type = this.modelValue.storage_type;
+      this.indexData.shard_num = this.modelValue.shard_num;
       this.indexData.settings = this.modelValue.settings || {};
       this.indexData.mappings = this.modelValue.mappings || {};
     }
@@ -199,6 +209,12 @@ export default defineComponent({
         return true;
       }
       return "Storage type is required";
+    },
+    validateShardNum(val) {
+      if (val && val.length > 0) {
+        this.indexData.shard_num = parseInt(val, 10);
+      }
+      return true;
     },
     onJsonError(error) {
       if (error && error.length > 0) {

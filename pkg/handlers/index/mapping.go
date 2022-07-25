@@ -45,7 +45,7 @@ func GetMapping(c *gin.Context) {
 	// format mappings
 	mappings := index.GetMappings()
 
-	c.JSON(http.StatusOK, gin.H{index.Name: gin.H{"mappings": mappings}})
+	c.JSON(http.StatusOK, gin.H{index.GetName(): gin.H{"mappings": mappings}})
 }
 
 // @Id SetMapping
@@ -78,7 +78,7 @@ func SetMapping(c *gin.Context) {
 		return
 	}
 
-	index, exists, err := core.GetOrCreateIndex(indexName, "")
+	index, exists, err := core.GetOrCreateIndex(indexName, "", 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, meta.HTTPResponseError{Error: err.Error()})
 		return
@@ -86,9 +86,10 @@ func SetMapping(c *gin.Context) {
 
 	// check if mapping field is exists
 	if exists {
-		if index.Mappings != nil && index.Mappings.Len() > 0 {
+		indexMappings := index.GetMappings()
+		if indexMappings != nil && indexMappings.Len() > 0 {
 			for field := range mappings.ListProperty() {
-				if _, ok := index.Mappings.GetProperty(field); ok {
+				if _, ok := indexMappings.GetProperty(field); ok {
 					c.JSON(http.StatusBadRequest, meta.HTTPResponseError{Error: "index [" + indexName + "] already exists mapping of field [" + field + "]"})
 					return
 				}
@@ -96,9 +97,9 @@ func SetMapping(c *gin.Context) {
 		}
 		// add mappings
 		for field, prop := range mappings.ListProperty() {
-			index.Mappings.SetProperty(field, prop)
+			indexMappings.SetProperty(field, prop)
 		}
-		mappings = index.Mappings
+		mappings = indexMappings
 	}
 
 	// update mappings

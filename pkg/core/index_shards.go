@@ -16,7 +16,10 @@
 package core
 
 import (
+	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/blugelabs/bluge"
@@ -27,84 +30,155 @@ import (
 	"github.com/zinclabs/zinc/pkg/config"
 	"github.com/zinclabs/zinc/pkg/errors"
 	"github.com/zinclabs/zinc/pkg/meta"
-	"github.com/zinclabs/zinc/pkg/metadata"
+	"github.com/zinclabs/zinc/pkg/wal"
+	"github.com/zinclabs/zinc/pkg/zutils"
 )
 
-// CheckShards if current shard reach the maximum shard size, create a new shard
+// HASH default hash function for docID
+var HASH = zutils.NewDefaultHasher()
+
+type IndexShard struct {
+	name   string // shard name: index/shardID
+	root   *Index
+	ref    *meta.IndexShard
+	shards []*IndexSecondShard
+	wal    *wal.Log
+	lock   sync.RWMutex
+	open   uint32
+	close  chan struct{}
+}
+
+type IndexSecondShard struct {
+	root   *Index
+	ref    *meta.IndexSecondShard
+	writer *bluge.Writer
+	lock   sync.RWMutex
+}
+
+// GetShardByDocID return the shard by hash docID
+func (index *Index) GetShardByDocID(docID string) *IndexShard {
+	keyHash := HASH.Sum64(docID)
+	shardKey := keyHash % index.shardNumUint
+	return index.shards[shardKey]
+}
+
+// CheckShards check all shards status if need create new second layer shard
 func (index *Index) CheckShards() error {
-	w, err := index.GetWriter()
+	for _, shard := range index.shards {
+		if err := shard.CheckShards(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CheckShards check current shard is reach the maximum shard size or create a new shard
+func (s *IndexShard) CheckShards() error {
+	w, err := s.GetWriter()
 	if err != nil {
 		return err
 	}
 	_, size := w.DirectoryStats()
 	if size > config.Global.Shard.MaxSize {
-		return index.NewShard()
+		return s.NewShard()
 	}
 	return nil
 }
 
-func (index *Index) NewShard() error {
-	log.Info().Str("index", index.Name).Int64("shard", atomic.LoadInt64(&index.ShardNum)).Msg("init new shard")
-	// update current shard
-	index.UpdateMetadataByShard(index.GetLatestShardID())
-	index.lock.Lock()
-	shard := index.Shards[index.ShardNum-1]
-	atomic.StoreInt64(&shard.DocTimeMin, index.DocTimeMin)
-	atomic.StoreInt64(&shard.DocTimeMax, index.DocTimeMax)
-	index.DocTimeMin = 0
-	index.DocTimeMax = 0
-	// create new shard
-	atomic.AddInt64(&index.ShardNum, 1)
-	index.Shards = append(index.Shards, &meta.IndexShard{ID: index.GetLatestShardID()})
-	index.lock.Unlock()
-	// store update
-	if err := metadata.Index.Set(index.Name, index.Index); err != nil {
-		return err
-	}
-	return index.openWriter(index.GetLatestShardID())
+func (s *IndexShard) GetIndexName() string {
+	return s.root.GetName()
 }
 
-func (index *Index) GetLatestShardID() int64 {
-	return atomic.LoadInt64(&index.ShardNum) - 1
+func (s *IndexShard) GetShardName() string {
+	if s.name != "" {
+		return s.name
+	}
+	str := strings.Builder{}
+	str.WriteString(s.root.GetName())
+	str.WriteString("/")
+	str.WriteString(fmt.Sprintf("%06x", s.GetID()))
+	s.name = str.String()
+	return s.name
+}
+
+func (s *IndexShard) GetID() int64 {
+	return s.ref.ID
+}
+
+func (s *IndexShard) GetShardNum() int64 {
+	return atomic.LoadInt64(&s.ref.ShardNum)
+}
+
+func (s *IndexShard) GetLatestShardID() int64 {
+	return atomic.LoadInt64(&s.ref.ShardNum) - 1
+}
+
+func (s *IndexShard) NewShard() error {
+	log.Info().
+		Str("index", s.root.GetName()).
+		Int64("shard", s.GetID()).
+		Int64("second shard", s.GetShardNum()).
+		Msg("init new second layer shard")
+
+	// update current shard
+	s.root.UpdateStatsBySecondShard(s.GetID(), s.GetLatestShardID())
+	s.root.lock.Lock()
+	secondShard := s.shards[s.GetLatestShardID()]
+	secondShard.ref.Stats.DocTimeMin = s.ref.Stats.DocTimeMin
+	secondShard.ref.Stats.DocTimeMax = s.ref.Stats.DocTimeMax
+	s.ref.Stats.DocTimeMin = 0
+	s.ref.Stats.DocTimeMax = 0
+	// create new shard
+	atomic.AddInt64(&s.ref.ShardNum, 1)
+	s.ref.Shards = append(s.ref.Shards, &meta.IndexSecondShard{ID: s.GetLatestShardID()})
+	s.shards = append(s.shards, &IndexSecondShard{root: s.root, ref: s.ref.Shards[s.GetLatestShardID()]})
+	s.root.lock.Unlock()
+
+	// store update
+	if err := storeIndex(s.root); err != nil {
+		return err
+	}
+	return s.openWriter(s.GetLatestShardID())
 }
 
 // GetWriter return the newest shard writer or special shard writer
-func (index *Index) GetWriter(shards ...int64) (*bluge.Writer, error) {
-	var shard int64
-	if len(shards) == 1 {
-		shard = shards[0]
+func (s *IndexShard) GetWriter(shardID ...int64) (*bluge.Writer, error) {
+	var id int64
+	if len(shardID) == 1 {
+		id = shardID[0]
 	} else {
-		shard = index.GetLatestShardID()
+		id = s.GetLatestShardID()
 	}
-	if shard >= atomic.LoadInt64(&index.ShardNum) || shard < 0 {
-		return nil, errors.New(errors.ErrorTypeRuntimeException, "shard not found")
+	if id >= s.GetShardNum() || id < 0 {
+		return nil, errors.New(errors.ErrorTypeRuntimeException, "second shard not found")
 	}
-	index.lock.RLock()
-	s := index.Shards[shard]
-	index.lock.RUnlock()
-	s.Lock.RLock()
-	w := s.Writer
-	s.Lock.RUnlock()
+	s.lock.RLock()
+	secondShard := s.shards[id]
+	s.lock.RUnlock()
+
+	secondShard.lock.RLock()
+	w := secondShard.writer
+	secondShard.lock.RUnlock()
 	if w != nil {
-		return s.Writer, nil
+		return w, nil
 	}
 
 	// open writer
-	if err := index.openWriter(shard); err != nil {
+	if err := s.openWriter(id); err != nil {
 		return nil, err
 	}
 
-	s.Lock.RLock()
-	w = s.Writer
-	s.Lock.RUnlock()
+	secondShard.lock.RLock()
+	w = secondShard.writer
+	secondShard.lock.RUnlock()
 	return w, nil
 }
 
 // GetWriters return all shard writers
-func (index *Index) GetWriters() ([]*bluge.Writer, error) {
-	ws := make([]*bluge.Writer, 0, atomic.LoadInt64(&index.ShardNum))
-	for i := int64(0); i < atomic.LoadInt64(&index.ShardNum); i++ {
-		w, err := index.GetWriter(i)
+func (s *IndexShard) GetWriters() ([]*bluge.Writer, error) {
+	ws := make([]*bluge.Writer, 0, s.GetShardNum())
+	for i := int64(0); i < s.GetShardNum(); i++ {
+		w, err := s.GetWriter(i)
 		if err != nil {
 			return nil, err
 		}
@@ -114,24 +188,24 @@ func (index *Index) GetWriters() ([]*bluge.Writer, error) {
 }
 
 // GetReaders return all shard readers
-func (index *Index) GetReaders(timeMin, timeMax int64) ([]*bluge.Reader, error) {
+func (s *IndexShard) GetReaders(timeMin, timeMax int64) ([]*bluge.Reader, error) {
 	rs := make([]*bluge.Reader, 0, 1)
-	chs := make(chan *bluge.Reader, atomic.LoadInt64(&index.ShardNum))
+	chs := make(chan *bluge.Reader, s.GetShardNum())
 	eg := errgroup.Group{}
 	eg.SetLimit(config.Global.ReadGorutineNum)
-	for i := index.GetLatestShardID(); i >= 0; i-- {
+	for i := s.GetLatestShardID(); i >= 0; i-- {
 		var i = i
-		index.lock.RLock()
-		s := index.Shards[i]
-		index.lock.RUnlock()
-		sMin := atomic.LoadInt64(&s.DocTimeMin)
-		sMax := atomic.LoadInt64(&s.DocTimeMax)
+		s.lock.RLock()
+		secondShard := s.shards[i]
+		s.lock.RUnlock()
+		sMin := atomic.LoadInt64(&secondShard.ref.Stats.DocTimeMin)
+		sMax := atomic.LoadInt64(&secondShard.ref.Stats.DocTimeMax)
 		if (timeMin > 0 && sMax > 0 && sMax < timeMin) ||
 			(timeMax > 0 && sMin > 0 && sMin > timeMax) {
 			continue
 		}
 		eg.Go(func() error {
-			w, err := index.GetWriter(i)
+			w, err := s.GetWriter(i)
 			if err != nil {
 				return err
 			}
@@ -156,21 +230,118 @@ func (index *Index) GetReaders(timeMin, timeMax int64) ([]*bluge.Reader, error) 
 	return rs, nil
 }
 
-func (index *Index) openWriter(shard int64) error {
+func (s *IndexShard) openWriter(shardID int64) error {
 	var defaultSearchAnalyzer *analysis.Analyzer
-	if index.Analyzers != nil {
-		defaultSearchAnalyzer = index.Analyzers["default"]
+	analyzers := s.root.GetAnalyzers()
+	if analyzers != nil {
+		defaultSearchAnalyzer = analyzers["default"]
 	}
-	index.lock.RLock()
-	s := index.Shards[shard]
-	index.lock.RUnlock()
-	s.Lock.Lock()
-	defer s.Lock.Unlock()
-	if s.Writer != nil {
+	s.lock.RLock()
+	secondShard := s.shards[shardID]
+	s.lock.RUnlock()
+	secondShard.lock.Lock()
+	defer secondShard.lock.Unlock()
+	if secondShard.writer != nil {
 		return nil
 	}
 	var err error
-	indexName := fmt.Sprintf("%s/%06x", index.Name, shard)
-	s.Writer, err = OpenIndexWriter(indexName, index.StorageType, defaultSearchAnalyzer, 0, 0)
+	indexName := fmt.Sprintf("%s/%06x/%06x", s.GetIndexName(), s.GetID(), shardID)
+	secondShard.writer, err = OpenIndexWriter(indexName, s.root.GetStorageType(), defaultSearchAnalyzer, 0, 0)
 	return err
+}
+
+func (s *IndexShard) Close() error {
+	if atomic.LoadUint32(&s.open) == 0 {
+		return nil
+	}
+
+	s.close <- struct{}{}
+	atomic.StoreUint32(&s.open, 0)
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	for _, secondShard := range s.shards {
+		if secondShard.writer == nil {
+			continue
+		}
+		if err := secondShard.writer.Close(); err != nil {
+			return err
+		}
+		secondShard.writer = nil
+	}
+
+	if err := s.wal.Close(); err != nil {
+		return err
+	}
+	s.wal = nil
+
+	return nil
+}
+
+func (s *IndexShard) SetTimestamp(t int64) {
+	s.root.lock.Lock()
+	defer s.root.lock.Unlock()
+	if s.ref.Stats.DocTimeMin == 0 {
+		s.ref.Stats.DocTimeMin = t
+		s.ref.Stats.DocTimeMax = t
+		return
+	}
+	if t < s.ref.Stats.DocTimeMin {
+		s.ref.Stats.DocTimeMin = t
+	} else if t > s.ref.Stats.DocTimeMax {
+		s.ref.Stats.DocTimeMax = t
+	}
+}
+
+// FindShardByDocID finds docID in which shard and returns the shard id
+func (s *IndexShard) FindShardByDocID(docID string) (int64, error) {
+	query := bluge.NewBooleanQuery()
+	query.AddMust(bluge.NewTermQuery(docID).SetField("_id"))
+	request := bluge.NewTopNSearch(1, query).WithStandardAggregations()
+	ctx := context.Background()
+
+	// check id store by which shard
+	shardID := int64(-1)
+	writers, err := s.GetWriters()
+	if err != nil {
+		return shardID, err
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(config.Global.ReadGorutineNum)
+	for id := int64(len(writers)) - 1; id >= 0; id-- {
+		id := id
+		w := writers[id]
+		eg.Go(func() error {
+			r, err := w.Reader()
+			if err != nil {
+				log.Error().Err(err).
+					Str("index", s.GetIndexName()).
+					Int64("shard", s.GetID()).
+					Int64("second shard", id).
+					Msg("failed to get reader")
+				return nil // not check err, if returns err with cancel all gorutines.
+			}
+			defer r.Close()
+			dmi, err := r.Search(ctx, request)
+			if err != nil {
+				log.Error().Err(err).
+					Str("index", s.GetIndexName()).
+					Int64("shard", s.GetID()).
+					Int64("second shard", id).
+					Msg("failed to do search")
+				return nil // not check err, if returns err with cancel all gorutines.
+			}
+			if dmi.Aggregations().Count() > 0 {
+				shardID = id
+				return errors.ErrCancelSignal // check err, if returns err with cancel other all gorutines.
+			}
+			return nil
+		})
+	}
+	_ = eg.Wait()
+	if shardID == -1 {
+		return shardID, errors.ErrorIDNotFound
+	}
+	return shardID, nil
 }

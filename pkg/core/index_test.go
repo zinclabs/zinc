@@ -31,7 +31,7 @@ import (
 
 func TestIndex_Index(t *testing.T) {
 	indexName := "TestIndex_Index.index_1"
-	index, err := NewIndex(indexName, "disk")
+	index, err := NewIndex(indexName, "disk", 2)
 	assert.NoError(t, err)
 	assert.NotNil(t, index)
 
@@ -134,12 +134,12 @@ func TestIndex_BuildBlugeDocumentFromJSON(t *testing.T) {
 				},
 			},
 			init: func() {
-				index.Mappings.SetProperty("@timestamp", meta.Property{
+				index.GetMappings().SetProperty("@timestamp", meta.Property{
 					Type:   "time",
 					Index:  true,
 					Format: "2006-01-02 15:04:05.000",
 				})
-				index.Mappings.SetProperty("time", meta.Property{
+				index.GetMappings().SetProperty("time", meta.Property{
 					Type:   "time",
 					Index:  true,
 					Format: "2006-01-02 15:04:05.000",
@@ -161,18 +161,18 @@ func TestIndex_BuildBlugeDocumentFromJSON(t *testing.T) {
 				},
 			},
 			init: func() {
-				index.Mappings.SetProperty("id", meta.Property{
+				index.GetMappings().SetProperty("id", meta.Property{
 					Type:         "keyword",
 					Index:        true,
 					Aggregatable: true,
 				})
-				index.Mappings.SetProperty("name", meta.Property{
+				index.GetMappings().SetProperty("name", meta.Property{
 					Type:          "text",
 					Analyzer:      "analyzer_1",
 					Index:         true,
 					Highlightable: true,
 				})
-				index.Analyzers["analyzer_1"] = analyzer.NewStandardAnalyzer()
+				index.analyzers["analyzer_1"] = analyzer.NewStandardAnalyzer()
 			},
 			want:    &bluge.Document{},
 			wantErr: false,
@@ -257,30 +257,34 @@ func TestIndex_BuildBlugeDocumentFromJSON(t *testing.T) {
 	}
 
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex(indexName, "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 
 		err = StoreIndex(index)
 		assert.NoError(t, err)
-		index.Mappings.SetProperty("time", meta.NewProperty("date"))
+		index.GetMappings().SetProperty("time", meta.NewProperty("date"))
 	})
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.init()
-			got, err := index.CheckDocument(tt.args.docID, tt.args.doc, false, 0)
+			shard := index.GetShardByDocID(tt.args.docID)
+			assert.NotNil(t, shard)
+
+			got, err := shard.CheckDocument(tt.args.docID, tt.args.doc, false, 0)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
 			assert.Nil(t, err)
 			assert.NotNil(t, got)
+
 			var doc map[string]interface{}
 			err = json.Unmarshal(got, &doc)
 			assert.NoError(t, err)
 			assert.NotNil(t, doc)
-			got2, err := index.BuildBlugeDocumentFromJSON(tt.args.docID, doc)
+			got2, err := shard.BuildBlugeDocumentFromJSON(tt.args.docID, doc)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -305,7 +309,7 @@ func TestIndex_Settings(t *testing.T) {
 	indexName := "TestIndex_Settings.index_1"
 
 	t.Run("prepare", func(t *testing.T) {
-		index, err = NewIndex(indexName, "disk")
+		index, err = NewIndex(indexName, "disk", 2)
 		assert.NoError(t, err)
 		assert.NotNil(t, index)
 

@@ -30,13 +30,13 @@ import (
 // @Id ListIndexes
 // @Summary List indexes
 // @Tags    Index
-// @Param   page_num  query  integer  false  "page num"
-// @Param   page_size  query  integer  false  "page size"
-// @Param   sort_by  query  string  false  "sort by"
-// @Param   desc  query  boolen  false  "desc"
-// @Param   name  query  string  false  "name"
+// @Param   page_num  query  integer false  "page num"
+// @Param   page_size query  integer false  "page size"
+// @Param   sort_by   query  string  false  "sort by"
+// @Param   desc      query  bool    false  "desc"
+// @Param   name      query  string  false  "name"
 // @Produce json
-// @Success 200 {object} {list:[]core.Index, page: meta.Page}
+// @Success 200 {object} IndexListResponse
 // @Router /api/index [get]
 func List(c *gin.Context) {
 	page := meta.NewPage(c)
@@ -60,41 +60,41 @@ func List(c *gin.Context) {
 	case "doc_num":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].DocNum > items[j].DocNum
+				return items[i].GetStats().DocNum > items[j].GetStats().DocNum
 			} else {
-				return items[i].DocNum < items[j].DocNum
+				return items[i].GetStats().DocNum < items[j].GetStats().DocNum
 			}
 		})
 	case "shard_num":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].ShardNum > items[j].ShardNum
+				return items[i].GetShardNum() > items[j].GetShardNum()
 			} else {
-				return items[i].ShardNum < items[j].ShardNum
+				return items[i].GetShardNum() < items[j].GetShardNum()
 			}
 		})
 	case "storage_size":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].StorageSize > items[j].StorageSize
+				return items[i].GetStats().StorageSize > items[j].GetStats().StorageSize
 			} else {
-				return items[i].StorageSize < items[j].StorageSize
+				return items[i].GetStats().StorageSize < items[j].GetStats().StorageSize
 			}
 		})
 	case "storage_type":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].StorageType > items[j].StorageType
+				return items[i].GetStorageType() > items[j].GetStorageType()
 			} else {
-				return items[i].StorageType < items[j].StorageType
+				return items[i].GetStorageType() < items[j].GetStorageType()
 			}
 		})
 	case "wal_size":
 		sort.Slice(items, func(i, j int) bool {
 			if desc {
-				return items[i].WALSize > items[j].WALSize
+				return items[i].GetWALSize() > items[j].GetWALSize()
 			} else {
-				return items[i].WALSize < items[j].WALSize
+				return items[i].GetWALSize() < items[j].GetWALSize()
 			}
 		})
 	case "name":
@@ -117,9 +117,9 @@ func List(c *gin.Context) {
 		items = []*core.Index{}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"list": items,
-		"page": page,
+	c.JSON(http.StatusOK, IndexListResponse{
+		List: items,
+		Page: page,
 	})
 }
 
@@ -150,4 +150,9 @@ func IndexNameList(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, items)
 	}
+}
+
+type IndexListResponse struct {
+	List []*core.Index `json:"list"`
+	Page *meta.Page    `json:"page"`
 }

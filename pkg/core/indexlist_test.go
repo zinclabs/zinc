@@ -23,7 +23,7 @@ import (
 
 func TestIndexList_List(t *testing.T) {
 	indexName := "TestIndexList_List.index_1"
-	index, exist, err := GetOrCreateIndex(indexName, "")
+	index, exist, err := GetOrCreateIndex(indexName, "", 2)
 	assert.NoError(t, err)
 	assert.False(t, exist)
 	assert.NotNil(t, index)
