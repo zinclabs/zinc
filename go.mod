@@ -19,7 +19,7 @@ require (
 	github.com/go-ego/gse v0.70.2
 	github.com/goccy/go-json v0.9.10
 	github.com/joho/godotenv v1.4.0
-	github.com/minio/minio-go/v7 v7.0.31
+	github.com/minio/minio-go/v7 v7.0.32
 	github.com/pyroscope-io/client v0.3.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.27.0
